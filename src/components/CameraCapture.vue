@@ -21,7 +21,9 @@
 import { Component, Vue } from "vue-property-decorator";
 import * as cocoSsd from "@tensorflow-models/coco-ssd";
 import * as tf from "@tensorflow/tfjs";
-
+require("@tensorflow/tfjs-backend-cpu");
+require("@tensorflow/tfjs-backend-webgl");
+require("@tensorflow/tfjs-converter");
 @Component({})
 export default class CameraCapture extends Vue {
   public streamPromise: any;
@@ -61,6 +63,8 @@ export default class CameraCapture extends Vue {
               Then addEventListener on resize, which will adjust the size but remain the ratio
               At last, resolve the Promise.
             */
+          this.isVideoStreamReady = true;
+          this.setResultSize();
           return new Promise((resolve: any, reject) => {
             // when video is loaded
             video.onloadedmetadata = () => {
@@ -69,8 +73,8 @@ export default class CameraCapture extends Vue {
               // add event listener on resize to reset the <video> and <canvas> sizes
               window.addEventListener("resize", this.setResultSize);
               // set the initial size
-              this.setResultSize();
-              this.isVideoStreamReady = true;
+              //this.setResultSize();
+              //this.isVideoStreamReady = true;
               console.log("webcam stream initialized");
               resolve();
             };
@@ -78,6 +82,7 @@ export default class CameraCapture extends Vue {
         })
         .catch(error => {
           console.log("failed to initialize webcam stream", error);
+          window.removeEventListener("resize", this.setResultSize);
           throw error;
         });
     } else {
@@ -130,7 +135,7 @@ export default class CameraCapture extends Vue {
       this.detectObjects();
     });
   }
-  loadModelAndStartDetecting() {
+  async loadModelAndStartDetecting() {
     this.modelPromise = this.loadModel();
     // wait for both stream and model promise finished
     // => start detecting objects
@@ -139,6 +144,7 @@ export default class CameraCapture extends Vue {
         this.detectObjects();
       })
       .catch(error => {
+        console.log(error);
         console.log("Failed to init stream and/or model");
         this.initFailMessage = error;
       });
@@ -149,6 +155,7 @@ export default class CameraCapture extends Vue {
     // clear the canvas
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     predictions.forEach((prediction: any) => {
+      console.log(prediction);
       ctx.beginPath();
       ctx.rect(...prediction.bbox);
       ctx.lineWidth = 3;
@@ -180,5 +187,19 @@ export default class CameraCapture extends Vue {
   text-align: center;
   color: #2c3e50;
   margin-top: 60px;
+}
+
+body {
+  margin: 0;
+}
+.resultFrame {
+  display: grid;
+}
+
+video {
+  grid-area: 1 / 1 / 2 / 2;
+}
+canvas {
+  grid-area: 1 / 1 / 2 / 2;
 }
 </style>
