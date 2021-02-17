@@ -8,7 +8,7 @@
       <video ref="video" autoplay></video>
       <canvas ref="canvas" :width="resultWidth" :height="resultHeight"></canvas>
     </div>
-
+    <button @click="startMatching = !startMatching">{{ startMatching ? "Stop" : "Start" }}</button>
     <select v-model="baseModel" @change="loadModelAndStartDetecting">
       <option v-for="modelName in selectableModels" :key="modelName" :value="modelName">
         {{ modelName }}
@@ -18,12 +18,12 @@
 </template>
 
 <script lang="ts">
-import { Component, Vue } from "vue-property-decorator";
+import { Component, Vue, Watch } from "vue-property-decorator";
 import * as cocoSsd from "@tensorflow-models/coco-ssd";
-import * as tf from "@tensorflow/tfjs";
-require("@tensorflow/tfjs-backend-cpu");
-require("@tensorflow/tfjs-backend-webgl");
-require("@tensorflow/tfjs-converter");
+//import * as tf from "@tensorflow/tfjs";
+import "@tensorflow/tfjs-backend-cpu";
+import "@tensorflow/tfjs-backend-webgl";
+//import "@tensorflow/tfjs-converter";
 @Component({})
 export default class CameraCapture extends Vue {
   public streamPromise: any;
@@ -37,6 +37,25 @@ export default class CameraCapture extends Vue {
   public videoRatio = 1;
   public resultWidth = 0;
   public resultHeight = 0;
+  public startMatching = false;
+  public timer: any = null;
+
+  @Watch("startMatching")
+  startMatch(value: boolean) {
+    clearTimeout(this.timer);
+    if (value) {
+      this.timer = setInterval(
+        function() {
+          requestAnimationFrame(
+            function() {
+              (this as any).detectObjects();
+            }.bind(this)
+          );
+        }.bind(this),
+        500
+      );
+    }
+  }
 
   public initWebcamStream() {
     // if the browser supports mediaDevices.getUserMedia API
@@ -71,7 +90,7 @@ export default class CameraCapture extends Vue {
               // calculate the video ratio
               this.videoRatio = video.offsetHeight / video.offsetWidth;
               // add event listener on resize to reset the <video> and <canvas> sizes
-              window.addEventListener("resize", this.setResultSize);
+
               // set the initial size
               //this.setResultSize();
               //this.isVideoStreamReady = true;
@@ -131,15 +150,11 @@ export default class CameraCapture extends Vue {
     const predictions = await this.model.detect(this.$refs.video);
     console.log(predictions);
     this.renderPredictions(predictions);
-    requestAnimationFrame(() => {
-      this.detectObjects();
-    });
   }
   async loadModelAndStartDetecting() {
-    this.modelPromise = this.loadModel();
     // wait for both stream and model promise finished
     // => start detecting objects
-    Promise.all([this.streamPromise, this.modelPromise])
+    Promise.all([this.streamPromise, this.loadModel()])
       .then(() => {
         this.detectObjects();
       })
@@ -155,12 +170,11 @@ export default class CameraCapture extends Vue {
     // clear the canvas
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     predictions.forEach((prediction: any) => {
-      console.log(prediction);
       ctx.beginPath();
       ctx.rect(...prediction.bbox);
       ctx.lineWidth = 3;
-      ctx.strokeStyle = "red";
-      ctx.fillStyle = "red";
+      ctx.strokeStyle = "#34bebd";
+      ctx.fillStyle = "#34bebd";
       ctx.stroke();
       ctx.shadowColor = "white";
       ctx.shadowBlur = 10;
@@ -175,6 +189,11 @@ export default class CameraCapture extends Vue {
   mounted() {
     this.streamPromise = this.initWebcamStream();
     this.loadModelAndStartDetecting();
+    window.addEventListener("resize", this.setResultSize);
+  }
+
+  destoryed() {
+    window.removeEventListener("resize", this.setResultSize);
   }
 }
 </script>
