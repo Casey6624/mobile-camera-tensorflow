@@ -9,17 +9,13 @@
       <canvas ref="canvas" :width="resultWidth" :height="resultHeight"></canvas>
     </div>
     <button @click="startMatching = !startMatching">{{ startMatching ? "Stop" : "Start" }}</button>
-    <select v-model="baseModel" @change="loadModelAndStartDetecting">
-      <option v-for="modelName in selectableModels" :key="modelName" :value="modelName">
-        {{ modelName }}
-      </option>
-    </select>
   </div>
 </template>
 
 <script lang="ts">
 import { Component, Vue, Watch } from "vue-property-decorator";
 import * as cocoSsd from "@tensorflow-models/coco-ssd";
+import * as blazeFace from "@tensorflow-models/blazeface";
 //import * as tf from "@tensorflow/tfjs";
 import "@tensorflow/tfjs-backend-cpu";
 import "@tensorflow/tfjs-backend-webgl";
@@ -33,12 +29,13 @@ export default class CameraCapture extends Vue {
   public initFailMessage = "";
   public model: any;
   public baseModel: any = "lite_mobilenet_v2";
-  public selectableModels: string[] = ["lite_mobilenet_v2", "mobilenet_v1", "mobilenet_v2"];
   public videoRatio = 1;
   public resultWidth = 0;
   public resultHeight = 0;
   public startMatching = false;
   public timer: any = null;
+
+  public detectionType: "objects" | "faces" = "faces";
 
   @Watch("startMatching")
   startMatch(value: boolean) {
@@ -133,24 +130,45 @@ export default class CameraCapture extends Vue {
     // if model already exists => dispose it and load a new one
     if (this.model) this.model.dispose();
     // load model with the baseModel
-    return cocoSsd
-      .load(this.baseModel)
-      .then(model => {
-        this.model = model;
-        this.isModelReady = true;
-        console.log("model loaded");
-      })
-      .catch(error => {
-        console.log("failed to load the model", error);
-        throw error;
-      });
+    if (this.detectionType === "objects") {
+      return cocoSsd
+        .load(this.baseModel)
+        .then(model => {
+          this.model = model;
+          this.isModelReady = true;
+          console.log("model loaded");
+        })
+        .catch(error => {
+          console.log("failed to load the model", error);
+          throw error;
+        });
+    } else if (this.detectionType === "faces") {
+      return blazeFace
+        .load()
+        .then(model => {
+          this.model = model;
+          this.isModelReady = true;
+          console.log("model loaded");
+        })
+        .catch(error => {
+          console.log("failed to load the model", error);
+          throw error;
+        });
+    }
   }
   async detectObjects() {
     if (!this.isModelReady) return;
-    const predictions = await this.model.detect(this.$refs.video);
+    let predictions;
+
+    if (this.detectionType === "objects") {
+      predictions = await this.model.detect(this.$refs.video);
+    } else if (this.detectionType === "faces") {
+      predictions = await this.model.estimateFaces(this.$refs.video, false);
+    }
     console.log(predictions);
     this.renderPredictions(predictions);
   }
+
   async loadModelAndStartDetecting() {
     // wait for both stream and model promise finished
     // => start detecting objects
@@ -169,22 +187,36 @@ export default class CameraCapture extends Vue {
     const ctx: any = (this.$refs.canvas as any).getContext("2d");
     // clear the canvas
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    predictions.forEach((prediction: any) => {
-      ctx.beginPath();
-      ctx.rect(...prediction.bbox);
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = "#34bebd";
-      ctx.fillStyle = "#34bebd";
-      ctx.stroke();
-      ctx.shadowColor = "white";
-      ctx.shadowBlur = 10;
-      ctx.font = "24px Arial bold";
-      ctx.fillText(
-        `${(prediction.score * 100).toFixed(1)}% ${prediction.class}`,
-        prediction.bbox[0],
-        prediction.bbox[1] > 10 ? prediction.bbox[1] - 5 : 10
-      );
-    });
+    if (this.detectionType === "objects") {
+      predictions.forEach((prediction: any) => {
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "#34bebd";
+        ctx.fillStyle = "#34bebd";
+        ctx.stroke();
+        ctx.shadowBlur = 10;
+        ctx.font = "24px Arial bold";
+
+        ctx.beginPath();
+        ctx.rect(...prediction.bbox);
+        ctx.fillText(
+          `${(prediction.score * 100).toFixed(1)}% ${prediction.class}`,
+          prediction.bbox[0],
+          prediction.bbox[1] > 10 ? prediction.bbox[1] - 5 : 10
+        );
+      });
+    } else if (this.detectionType === "faces") {
+      predictions.forEach((prediction: any) => {
+        ctx.beginPath();
+        ctx.rect(...prediction.topLeft, ...prediction.bottomRight);
+        ctx.fillText(
+          `${(prediction.length > 0 ? prediction.probability[0] : 0 * 100).toFixed(1)}% ${
+            prediction.length > 0 ? prediction.probability[0] : 0
+          }`,
+          prediction.topLeft,
+          prediction.bottomRight > 10 ? prediction.bbox[1] - 5 : 10
+        );
+      });
+    }
   }
   mounted() {
     this.streamPromise = this.initWebcamStream();
