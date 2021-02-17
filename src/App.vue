@@ -1,19 +1,16 @@
 <template>
   <div id="app">
-    <img alt="Vue logo" src="./assets/logo.png">
-    <HelloWorld msg="Welcome to Your Vue.js + TypeScript App"/>
+    <h1>TensorFlow camera capturing</h1>
+    <CameraCapture />
   </div>
 </template>
 
 <script lang="ts">
-import { Component, Vue } from 'vue-property-decorator';
-import HelloWorld from './components/HelloWorld.vue';
+import { Component, Vue } from "vue-property-decorator";
+// components
+import CameraCapture from "./components/CameraCapture.vue";
 
-@Component({
-  components: {
-    HelloWorld,
-  },
-})
+@Component({ components: { CameraCapture } })
 export default class App extends Vue {}
 </script>
 
